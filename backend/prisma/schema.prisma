@@ -1,0 +1,160 @@
+// CommuteMate Database Schema v1.1
+// Adds: gender, gender preference, trust, IT park tagging, company verification
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  company       String?
+  companyTier   String?
+  itParkId      String?
+  itParkName    String?
+  homeLat       Float?
+  homeLng       Float?
+  homeArea      String?
+  workLat       Float?
+  workLng       Float?
+  gender        Gender?
+  genderPreference GenderPreference @default(ANY)
+  vehicleType   VehicleType?
+  vehicleSeats  Int?
+  vehicleNumber String?
+  vehicleModel  String?
+  maxDetourMinutes   Int @default(5)
+  pickupBufferMetres Int @default(600)
+  preferKnownRiders  Boolean @default(false)
+  trustScore    Int @default(50)
+  totalRides    Int @default(0)
+  fcmToken      String?
+  optins              DailyOptin[]
+  sharerMatches       Match[]           @relation("SharerMatches")
+  participantMatches  MatchParticipant[]
+  trustGiven          TrustSignal[]     @relation("TrustGiven")
+  trustReceived       TrustSignal[]     @relation("TrustReceived")
+  squadsCreated       Squad[]           @relation("SquadCreator")
+  squadMemberships    SquadMember[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("users")
+}
+
+model EmailVerification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  @@map("email_verifications")
+}
+
+model DailyOptin {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String      @db.ObjectId
+  user          User        @relation(fields: [userId], references: [id])
+  date          DateTime
+  role          OptinRole
+  departureTime String?
+  status        OptinStatus @default(ACTIVE)
+  routePolyline String?
+  matchId       String?    @db.ObjectId
+  match         Match?      @relation(fields: [matchId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([userId, date])
+  @@map("daily_optins")
+}
+
+model Match {
+  id       String      @id @default(auto()) @map("_id") @db.ObjectId
+  sharerId String      @db.ObjectId
+  sharer   User        @relation("SharerMatches", fields: [sharerId], references: [id])
+  date     DateTime
+  status   MatchStatus @default(PENDING)
+  routePolyline   String?
+  totalDistanceKm Float?
+  petrolCostTotal Float?
+  participants MatchParticipant[]
+  optins       DailyOptin[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("matches")
+}
+
+model MatchParticipant {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  matchId    String @db.ObjectId
+  match      Match  @relation(fields: [matchId], references: [id])
+  commuterID String @db.ObjectId
+  commuter   User   @relation(fields: [commuterID], references: [id])
+  pickupLat     Float?
+  pickupLng     Float?
+  pickupAddress String?
+  dropLat       Float?
+  dropLng       Float?
+  dropAddress   String?
+  distanceKm  Float?
+  petrolShare Float?
+  otp          String?
+  otpVerified  Boolean  @default(false)
+  otpExpiresAt DateTime?
+  status ParticipantStatus @default(PENDING)
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("match_participants")
+}
+
+model TrustSignal {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  fromUserId String @db.ObjectId
+  fromUser   User   @relation("TrustGiven", fields: [fromUserId], references: [id])
+  toUserId   String @db.ObjectId
+  toUser     User   @relation("TrustReceived", fields: [toUserId], references: [id])
+  matchId    String
+  wouldRideAgain Boolean
+  tags           String[]
+  createdAt DateTime @default(now())
+  @@unique([fromUserId, matchId])
+  @@map("trust_signals")
+}
+
+model Squad {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  createdById String   @db.ObjectId
+  createdBy   User     @relation("SquadCreator", fields: [createdById], references: [id])
+  rideDays    String[]
+  departureTime String
+  members     SquadMember[]
+  createdAt   DateTime @default(now())
+  @@map("squads")
+}
+
+model SquadMember {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  squadId String @db.ObjectId
+  squad   Squad     @relation(fields: [squadId], references: [id])
+  userId  String @db.ObjectId
+  user    User      @relation(fields: [userId], references: [id])
+  role    OptinRole
+  @@unique([squadId, userId])
+  @@map("squad_members")
+}
+
+enum Gender { MALE FEMALE OTHER PREFER_NOT_TO_SAY }
+enum GenderPreference { ANY WOMEN_ONLY MEN_ONLY }
+enum VehicleType { BIKE CAR AUTO }
+enum OptinRole { SHARER COMMUTER }
+enum OptinStatus { ACTIVE MATCHED CANCELLED }
+enum MatchStatus { PENDING CONFIRMED IN_PROGRESS COMPLETED CANCELLED }
+enum ParticipantStatus { PENDING CONFIRMED BOARDED DROPPED NO_SHOW CANCELLED }
